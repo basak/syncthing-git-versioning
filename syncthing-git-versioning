@@ -1,0 +1,89 @@
+#!/bin/sh
+set -e
+
+# Copyright 2024 Robie Basak
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+#
+# Dependencies: /bin/sh, git, basename, dirname. git-annex is supported but not
+# required to be installed.
+#
+# Run from syncthing as:
+# syncthing-git-versioning /path/to/non-bare-git-repo %FOLDER_PATH% %FILE_PATH%
+
+
+# It doesn't make sense to use the local user's configured name when Syncthing
+# is driving it, and this also saves us from dealing with unset name and emails
+# that git will complain about.
+export GIT_AUTHOR_NAME="syncthing-git-versioning"
+export GIT_AUTHOR_EMAIL="syncthing-git-versioning@example.com"
+export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+
+has_parent_component() {
+    case "$(basename "$1")" in
+        ..) return 0 ;;
+        .|/) return 1 ;;
+        *)
+            has_parent_component "$(dirname "$1")" && return 0
+            return 1
+        ;;
+    esac
+}
+
+unblock_dir_path() {
+    # Given a directory path, ensure that such a path isn't blocked from
+    # being created because one of the components exists as a non-directory
+    # such as a regular file. This is done by removing (with `git rm`) such a
+    # file if it is found.
+    #
+    # For example, if we want to `mkdir -p foo/bar/baz` and a directory called
+    # `foo` already exists and under it is a regular file `foo/bar`, then
+    # `foo/bar` blocks `foo/bar/baz` from being created.
+    #
+    # The return value of this function is meaningless to the caller since it
+    # is used internally to terminate recursion. It should be ignored.
+    local p=$1
+
+    [ "$p" = "." -o "$p" = "/" ] && return 1
+    unblock_dir_path "$(dirname "$p")" && return 0
+    [ -d "./$p" ] && return 1
+    git rm "./$p"
+}
+
+git_dir=$1
+syncthing_dir=$2
+file_path=$3
+dir_path=$(dirname "$file_path")
+
+if has_parent_component "$file_path"; then
+    echo "Error: $file_path contains .. component" >&2
+    exit 1
+fi
+
+if [ ! -f "$syncthing_dir/$file_path" ]; then
+    echo "Error: $syncthing_dir/$file_path isn't a regular file" >&2
+    exit 1
+fi
+
+cd "$git_dir"
+unblock_dir_path "$dir_path" || true
+if [ -e "./$file_path" ]; then
+    rm -rf "./$file_path"
+fi
+mkdir -p "$dir_path"
+mv "$syncthing_dir/$file_path" "$dir_path/"
+if git config --get annex.uuid >/dev/null; then
+    # git-annex is in use, so use that. Users can use annex.largefiles to
+    # configure more specifically whether the annex should actually be used or
+    # not.
+    git annex add "./$file_path"
+else
+    # Use plain git
+    git add "./$file_path"
+fi
+git_status=$(git status --short --untracked-files=no)
+[ "$git_status" != "" ] && git commit -m"syncthing versioning update"
+exit 0
