@@ -9,7 +9,9 @@
 import itertools
 import os
 import pathlib
+import shutil
 import subprocess
+import tempfile
 import types
 
 import pytest
@@ -26,7 +28,7 @@ GIT_ENV.update(
 
 @pytest.fixture
 def test_paths(tmp_path):
-    elements = ["git", "other", "sync"]
+    elements = ["git", "other", "sync", "bin"]
     paths = types.SimpleNamespace(**{x: (tmp_path / x) for x in elements})
     for e in elements:
         os.mkdir(getattr(paths, e))
@@ -34,7 +36,7 @@ def test_paths(tmp_path):
     return paths
 
 
-def call_target(test_paths, file_path):
+def call_target(test_paths, file_path, env=None):
     subprocess.check_call(
         [
             os.path.join(
@@ -45,6 +47,7 @@ def call_target(test_paths, file_path):
             file_path,
         ],
         cwd=test_paths.other,
+        env=env,
     )
 
 
@@ -103,3 +106,56 @@ def test_permutation(initial, final, test_paths):
     subprocess.check_call(["git", "reset", "--hard"], cwd=test_paths.git)
     subprocess.check_call(["git", "clean", "-ffxd"], cwd=test_paths.git)
     assert (test_paths.git / final[0] / final[1]).read_text() == "content2"
+
+
+def test_git_commit_failure(test_paths):
+    """When git commit fails, original file should continue to exist
+
+    If there is an unexpected problem, we need to relay that through Syncthing
+    back to the user. If we fail to commit, we do exit non-zero. But Syncthing
+    seems to ignore this and continue anyway. To get Syncthing to fail, we also
+    need to ensure that the original file still exists.
+    """
+    wrap_env = dict(os.environ)
+    wrap_env["ORIG_GIT_PATH"] = shutil.which("git")
+
+    git_wrapper_path = test_paths.bin / "git"
+    git_wrapper_path.write_text(
+        """#!/bin/sh
+echo "Wrapper called" >&2
+if [ "$1" = "commit" ]; then
+    echo "Wrapper detected commit subcommand; failing deliberately for test" >&2
+    exit 1
+fi
+echo "Wrapper execing the real git at $ORIG_GIT_PATH" >&2
+exec "$ORIG_GIT_PATH" "$@"
+"""
+    )
+    git_wrapper_path.chmod(0o755)
+    wrap_env["PATH"] = f"{test_paths.bin}:{wrap_env['PATH']}"
+
+    (test_paths.sync / "target").write_text("content")
+    with pytest.raises(subprocess.CalledProcessError):
+        call_target(test_paths, "target", env=wrap_env)
+    assert (test_paths.sync / "target").exists()
+
+
+def test_cross_filesystem(test_paths):
+    """Test basic functionality if Syncthing folder and git repository are on
+    different filesystems.
+
+    This is relevant since we try to use hardlinks in
+    our implementation, and hardlinks across filesystems are not permitted.
+    """
+    if "XDG_RUNTIME_DIR" not in os.environ:
+        pytest.skip("XDG_RUNTIME_DIR unset")
+    runtime_dir = pathlib.Path(os.environ["XDG_RUNTIME_DIR"])
+    if test_paths.sync.stat().st_dev == runtime_dir.stat().st_dev:
+        pytest.skip("$XDG_RUNTIME_DIR is not on a separate filesystem")
+    with tempfile.TemporaryDirectory(dir=runtime_dir) as tmpdir:
+        test_paths.sync = pathlib.Path(tmpdir)
+        (test_paths.sync / "target").write_text("content")
+        call_target(test_paths, "target")
+        subprocess.check_call(["git", "reset", "--hard"], cwd=test_paths.git)
+        subprocess.check_call(["git", "clean", "-ffxd"], cwd=test_paths.git)
+        assert (test_paths.git / "target").read_text() == "content"

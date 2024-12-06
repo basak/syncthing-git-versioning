@@ -58,6 +58,9 @@ syncthing_dir=$2
 file_path=$3
 dir_path=$(dirname "$file_path")
 
+remove_source_file() { rm -f "$syncthing_dir/$file_path"; }
+remove_destination_file() { rm -f "$git_dir/$file_path"; }
+
 if has_parent_component "$file_path"; then
     echo "Error: $file_path contains .. component" >&2
     exit 1
@@ -74,7 +77,17 @@ if [ -e "./$file_path" ]; then
     rm -rf "./$file_path"
 fi
 mkdir -p "$dir_path"
-mv "$syncthing_dir/$file_path" "$dir_path/"
+
+# If there is an unexpected problem, we need to relay that through Syncthing
+# back to the user. If we fail to commit, we do exit non-zero. But Syncthing
+# seems to ignore this and continue anyway. To get Syncthing to fail, we also
+# need to ensure that the original file still exists. So create the new file
+# before deleting the old one. If a hardlink works, then that saves the extra
+# copy. If we end up failing before we are done, then the new file should be
+# deleted. If we succeed, then the old file should be deleted instead.
+
+ln "$syncthing_dir/$file_path" "$dir_path/" || cp -a "$syncthing_dir/$file_path" "$dir_path/"
+trap remove_destination_file EXIT
 if git config --get annex.uuid >/dev/null; then
     # git-annex is in use, so use that. Users can use annex.largefiles to
     # configure more specifically whether the annex should actually be used or
@@ -86,4 +99,5 @@ else
 fi
 git_status=$(git status --short --untracked-files=no)
 [ "$git_status" != "" ] && git commit -m"syncthing versioning update"
+trap remove_source_file EXIT
 exit 0
