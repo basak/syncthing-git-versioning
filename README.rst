@@ -44,7 +44,7 @@ Quick Start
 #. In Syncthing, go to "Edit" against your desired folder and go to the "File
    Versioning" tab. Under "File Versioning", choose "External File Versioning"
    and set "Command" to ``syncthing-git-versioning /path/to/repo
-   %FOLDER_PATH %FILE_PATH%`` as an external versioning hook, replacing
+   %FOLDER_PATH% %FILE_PATH%`` as an external versioning hook, replacing
    ``/path/to/repo`` with the path the git repository you created in the
    previous step. Do not expand ``%FOLDER_PATH%`` nor ``%FILE_PATH%``;
    Syncthing will do this at runtime.
