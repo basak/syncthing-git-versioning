@@ -1,0 +1,23 @@
+# Personal synced directories
+owner @{HOME}/syncthing/ r,
+owner @{HOME}/syncthing/** rw,
+
+/usr/local/bin/syncthing-git-versioning rix,
+# syncthing-git-versioning needs the following
+/usr/bin/basename ix,
+/usr/bin/cp ix,
+/usr/bin/dirname ix,
+/usr/bin/git ix,
+/usr/bin/git-annex ix,
+/usr/bin/ln ix,
+/usr/bin/mkdir ix,
+/usr/bin/mv ix,
+/usr/bin/rm ix,
+/usr/bin/xargs ix,
+/usr/lib/git-core/git ix,
+/tmp/** rw,  # syncthing.service has PrivateTmp=yes
+owner @{HOME}/.gitconfig r,
+owner @{HOME}/syncthing/** k,
+owner @{HOME}/syncthing.annex/ r,
+owner @{HOME}/syncthing.annex/** rwkl,
+owner @{HOME}/syncthing.annex/**/.git/hooks/** ix,

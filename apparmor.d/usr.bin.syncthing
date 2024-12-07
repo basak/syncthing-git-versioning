@@ -1,0 +1,37 @@
+# Last Modified: Sat Dec  7 19:47:45 2024
+abi <abi/3.0>,
+
+include <tunables/global>
+
+# AppArmor profile for syncthing synchronization program
+# Version of syncthing profiled: 1.19.2
+# Homepage: https://github.com/krathalan/apparmor-profiles
+# Copyright 2019-2021 (C) krathalan; Licensed under GPLv3
+
+profile syncthing /usr/bin/syncthing {
+  include <abstractions/base>
+  include <abstractions/ssl_certs>
+  include <abstractions/ssl_keys>
+  include if exists <local/usr.bin.syncthing>
+
+  network inet dgram,
+  network inet stream,
+  network inet6 dgram,
+  network inet6 stream,
+  network netlink raw,
+  network unix stream,
+
+  /etc/ca-certificates/extracted/cadir/* r,
+  /etc/iproute2/rt_tables r,
+  /etc/mime.types r,
+  /sys/kernel/mm/transparent_hugepage/hpage_pmd_size r,
+  /usr/bin/ip rix,
+  /usr/bin/syncthing rPx,
+  @{PROC}/*/net/route r,
+  @{PROC}/sys/net/core/somaxconn r,
+  @{system_share_dirs}/mime/globs2 r,
+  owner @{HOME}/.config/syncthing/ r,
+  owner @{HOME}/.config/syncthing/** rwk,
+  owner @{HOME}/.local/state/syncthing/ r,
+  owner @{HOME}/.local/state/syncthing/** rwk,
+}
