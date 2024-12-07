@@ -97,6 +97,10 @@ This tool and associated files are subject to the terms of the Mozilla Public
 License, v. 2.0. A copy of the license is include the file ``LICENSE`` in the
 source repository, or you can obtain it from https://mozilla.org/MPL/2.0/.
 
+An an exception, files found anywhere under ``apparmor.d/`` are distributed
+under the terms of tthe GNU General Public License, version 3. See the file
+``COYPING`` in that directory for the licence text.
+
 .. _Syncthing: https://syncthing.net/
 .. _git-annex: https://git-annex.branchable.com/
 .. _git-annex-config(1): https://git-annex.branchable.com/git-annex-config/
